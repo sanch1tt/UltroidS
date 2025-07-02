@@ -10,3 +10,4 @@ requests
 aiohttp
 catbox-uploader
 cloudscraper
+g4f
