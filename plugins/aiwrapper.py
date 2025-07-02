@@ -363,19 +363,15 @@ async def anthropic_ai(event):
             pass
 
 @ultroid_cmd(pattern="gpt( (.*)|$)")
-async def openai_ai(event):
+async def safone_gpt_api(event):
     """Use OpenAI GPT"""
     prompt = event.pattern_match.group(1).strip()
     if not prompt:
         return await event.eor("❌ Please provide a prompt!")
 
-    api_key = udB.get_key("OPENAI_API_KEY")
-    if not api_key:
-        return await event.eor("⚠️ Please set GPT API key using `setdb OPENAI_API_KEY your_api_key`")
-
     msg = await event.eor("🤔 Thinking...")
-    model = get_model("gpt")
-    
+    model = get_model("gpt") or "gpt-4.1-mini (via SafoneAPI)"
+
     header = (
         "🌟 **OpenAI GPT**\n"
         f"**Model:** `{model}`\n"
@@ -383,24 +379,45 @@ async def openai_ai(event):
         f"**🔍 Prompt:**\n{prompt}\n\n"
         "**💡 Response:**\n"
     )
-    
-    if event.client.me.bot:
-        await msg.edit(header)
-        response = ""
-        async for chunk in get_ai_response("gpt", prompt, api_key, stream=True):
-            response += chunk
-            try:
-                await msg.edit(header + response)
-            except Exception:
-                pass
-    else:
-        response =""
-        async for chunk in get_ai_response("gpt", prompt, api_key, stream=True):
-            response += chunk
-        try:
-            await msg.edit(header + response)
-        except Exception:
-            pass
+
+    try:
+        url = "https://api.safone.co/chatgpt"
+        payload = {
+            "message": prompt,
+            "version": 3,
+            "chat_mode": "assistant",
+            "dialog_messages": "[{\"bot\":\"\",\"user\":\"\"}]"
+        }
+
+        r = requests.post(url, json=payload)
+
+        if r.status_code != 200:
+            return await msg.edit(f"❌ API Error {r.status_code}: {r.text}")
+
+        data = r.json()
+
+        # Extract the assistant's message
+        reply = (
+            data.get("message") or
+            data.get("choices", [{}])[0].get("message", {}).get("content") or
+            "❌ No valid response received."
+        )
+
+        # For bot users: simulate streaming with edits
+        if event.client.me.bot:
+            await msg.edit(header)
+            response = ""
+            for word in reply.split():
+                response += word + " "
+                try:
+                    await msg.edit(header + response)
+                except Exception:
+                    pass
+        else:
+            await msg.edit(header + reply)
+
+    except Exception as e:
+        await msg.edit(f"❌ Error: `{e}`")
 
 @ultroid_cmd(pattern="deepseek( (.*)|$)")
 async def deepseek_ai(event):
