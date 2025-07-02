@@ -31,6 +31,7 @@ import json
 from . import LOGS, eor, get_string, udB, ultroid_cmd, async_searcher
 import aiohttp
 import asyncio
+import requests
 
 
 ENDPOINTS = {
