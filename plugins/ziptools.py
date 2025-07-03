@@ -22,6 +22,7 @@
    To set Password: `{i}dozip <password>`
 
 """
+import zipfile
 import os
 import time
 
@@ -84,49 +85,71 @@ async def unzipp(event):
     file = event.pattern_match.group(1).strip()
     t = time.time()
     if not ((reply and reply.media) or file):
-        return await event.eor("Reply to a zip/rar/exe file.")
+        return await event.eor("Reply to a zip file to extract.")
 
-    xx = await event.eor("Extracting...")
+    status = await event.eor("Extracting...")
 
     if reply.media:
         if not hasattr(reply.media, "document"):
-            return await xx.edit("Invalid media.")
-        if not reply.file.name.endswith(("zip", "rar", "exe")):
-            return await xx.edit("Only zip, rar, exe supported.")
+            return await status.edit("Invalid media.")
+        if not reply.file.name.endswith(".zip"):
+            return await status.edit("Only .zip files supported (safe mode).")
         image = await downloader(
-            reply.file.name, reply.media.document, xx, t, "Downloading..."
+            reply.file.name, reply.media.document, status, t, "Downloading..."
         )
         file = image.name
 
     if os.path.isdir("unzip"):
-        await bash("rm -rf unzip")
+        shutil.rmtree("unzip")
     os.mkdir("unzip")
 
-    await bash(f"7z x {file} -aoa -ounzip")
-    await asyncio.sleep(3)
+    try:
+        with zipfile.ZipFile(file, 'r') as zip_ref:
+            zip_ref.extractall("unzip")
+    except Exception as e:
+        return await status.edit(f"Extraction failed: `{e}`")
 
-    ok = []
+    all_paths = []
     for root, dirs, files in os.walk("unzip"):
         for name in files:
-            full_path = os.path.join(root, name)
-            ok.append(full_path)
+            all_paths.append(os.path.join(root, name))
+        for name in dirs:
+            all_paths.append(os.path.join(root, name))
 
-    if not ok:
-        return await xx.edit("No files extracted.")
+    if not all_paths:
+        return await status.edit("No files or folders extracted.")
 
-    for x in ok:
-        n_file, _ = await event.client.fast_uploader(
-            x, show_progress=True, event=event, message="Uploading...", to_delete=True
-        )
-        await event.client.send_file(
-            event.chat_id,
-            n_file,
-            force_document=True,
-            thumb=ULTConfig.thumb,
-            caption=f"`{n_file.name}`",
-        )
+    for path in all_paths:
+        if os.path.isdir(path):
+            continue  # skip folders (can't send directly)
+        try:
+            up_msg = await event.client.send_message(
+                event.chat_id, f"Uploading: `{os.path.basename(path)}`"
+            )
+            n_file, _ = await event.client.fast_uploader(
+                path,
+                show_progress=True,
+                event=event,
+                message="Uploading...",
+                to_delete=True,
+                status_msg=up_msg
+            )
+            await event.client.send_file(
+                event.chat_id,
+                n_file,
+                force_document=True,
+                thumb=ULTConfig.thumb,
+                caption=f"`{n_file.name}`",
+                reply_to=reply.id
+            )
+            await up_msg.delete()
+        except Exception as e:
+            await event.reply(f"Upload error: `{e}`")
 
-    await xx.delete()
+    shutil.rmtree("unzip")
+    os.remove(file)
+    await status.delete()
+
 
 @ultroid_cmd(pattern="addzip$")
 async def azipp(event):
