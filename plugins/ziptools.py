@@ -2,6 +2,7 @@ import os
 import time
 import zipfile
 import shutil
+from . import downloader, ultroid_cmd, ULTConfig
 from . import (
     HNDLR,
     ULTConfig,
@@ -54,52 +55,82 @@ async def zipp(event):
     os.remove(file)
     await xx.delete()
 
-
-@ultroid_cmd(pattern="unzip( (.*)|$)")
-async def unzipp(event):
+@ultroid_cmd(pattern="nozip$")
+async def safe_zip_extract(event):
+    """Extract zip files and upload files/folders (safe for Ultroid)."""
     reply = await event.get_reply_message()
-    file = event.pattern_match.group(1).strip()
+    if not reply or not reply.media:
+        return await event.eor("Reply to a .zip file.")
+
+    if not hasattr(reply.media, "document"):
+        return await event.eor("Invalid media.")
+
+    if not reply.file.name.endswith(".zip"):
+        return await event.eor("Only .zip files are supported in safe mode.")
+
+    msg = await event.eor("Extracting...")
+
     t = time.time()
-    if not ((reply and reply.media) or file):
-        return await event.eor("Reply to a zip file to extract.")
+    downloaded = await downloader(
+        reply.file.name,
+        reply.media.document,
+        msg,
+        t,
+        "Downloading...",
+    )
+    zip_path = downloaded.name
 
-    status = await event.eor("Extracting...")
-
-    if reply.media:
-        if not hasattr(reply.media, "document"):
-            return await status.edit("Invalid media.")
-        if not reply.file.name.endswith(".zip"):
-            return await status.edit("Only .zip files supported.")
-        image = await downloader(
-            reply.file.name, reply.media.document, status, t, "Downloading..."
-        )
-        file = image.name
-
-    if os.path.isdir("unzip"):
-        shutil.rmtree("unzip")
-    os.mkdir("unzip")
+    if os.path.isdir("nozip"):
+        shutil.rmtree("nozip")
+    os.mkdir("nozip")
 
     try:
-        with zipfile.ZipFile(file, 'r') as zip_ref:
-            zip_ref.extractall("unzip")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall("nozip")
     except Exception as e:
-        return await status.edit(f"Extraction failed: `{e}`")
+        return await msg.edit(f"Extraction failed: `{e}`")
 
-    ok = get_all_files("unzip")
-    for x in ok:
-        n_file, _ = await event.client.fast_uploader(
-            x, show_progress=True, event=event, message="Uploading...", to_delete=True
-        )
-        await event.client.send_file(
-            event.chat_id,
-            n_file,
-            force_document=True,
-            thumb=ULTConfig.thumb,
-            caption=f"`{n_file.name}`",
-        )
-    await status.delete()
-    shutil.rmtree("unzip")
-    os.remove(file)
+    # Walk extracted files and folders
+    all_paths = []
+    for root, dirs, files in os.walk("nozip"):
+        for name in files:
+            all_paths.append(os.path.join(root, name))
+        for name in dirs:
+            all_paths.append(os.path.join(root, name))
+
+    if not all_paths:
+        return await msg.edit("No files or folders extracted.")
+
+    for path in all_paths:
+        if os.path.isdir(path):
+            continue  # folders can't be uploaded directly
+        try:
+            up_msg = await event.client.send_message(
+                event.chat_id, f"Uploading: `{os.path.basename(path)}`"
+            )
+            n_file, _ = await event.client.fast_uploader(
+                path,
+                show_progress=True,
+                event=event,
+                message="Uploading...",
+                to_delete=True,
+                status_msg=up_msg
+            )
+            await event.client.send_file(
+                event.chat_id,
+                n_file,
+                force_document=True,
+                thumb=ULTConfig.thumb,
+                caption=f"`{n_file.name}`",
+                reply_to=reply.id
+            )
+            await up_msg.delete()
+        except Exception as e:
+            await event.reply(f"Upload error: `{e}`")
+
+    shutil.rmtree("nozip")
+    os.remove(zip_path)
+    await msg.delete()
 
 
 @ultroid_cmd(pattern="addzip$")
