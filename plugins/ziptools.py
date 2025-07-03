@@ -78,34 +78,43 @@ async def zipp(event):
     os.remove(file)
     await xx.delete()
 
-
 @ultroid_cmd(pattern="unzip( (.*)|$)")
 async def unzipp(event):
     reply = await event.get_reply_message()
     file = event.pattern_match.group(1).strip()
     t = time.time()
     if not ((reply and reply.media) or file):
-        await event.eor(get_string("zip_1"))
-        return
-    xx = await event.eor(get_string("com_1"))
+        return await event.eor("Reply to a zip/rar/exe file.")
+
+    xx = await event.eor("Extracting...")
+
     if reply.media:
         if not hasattr(reply.media, "document"):
-            return await xx.edit(get_string("zip_3"))
-        file = reply.media.document
+            return await xx.edit("Invalid media.")
         if not reply.file.name.endswith(("zip", "rar", "exe")):
-            return await xx.edit(get_string("zip_3"))
+            return await xx.edit("Only zip, rar, exe supported.")
         image = await downloader(
-            reply.file.name, reply.media.document, xx, t, get_string("com_5")
+            reply.file.name, reply.media.document, xx, t, "Downloading..."
         )
         file = image.name
+
     if os.path.isdir("unzip"):
         await bash("rm -rf unzip")
     os.mkdir("unzip")
+
     await bash(f"7z x {file} -aoa -ounzip")
-    await asyncio.sleep(4)
-    ok = get_all_files("unzip")
+    await asyncio.sleep(3)
+
+    ok = []
+    for root, dirs, files in os.walk("unzip"):
+        for name in files:
+            full_path = os.path.join(root, name)
+            ok.append(full_path)
+
+    if not ok:
+        return await xx.edit("No files extracted.")
+
     for x in ok:
-        k = time.time()
         n_file, _ = await event.client.fast_uploader(
             x, show_progress=True, event=event, message="Uploading...", to_delete=True
         )
@@ -116,8 +125,8 @@ async def unzipp(event):
             thumb=ULTConfig.thumb,
             caption=f"`{n_file.name}`",
         )
-    await xx.delete()
 
+    await xx.delete()
 
 @ultroid_cmd(pattern="addzip$")
 async def azipp(event):
