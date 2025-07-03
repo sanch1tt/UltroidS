@@ -55,7 +55,7 @@ async def zipp(event):
     os.remove(file)
     await xx.delete()
 
-@ultroid_cmd(pattern="nozip$")
+@ultroid_cmd(pattern="unzip$")
 async def safe_zip_extract(event):
     """Extract zip files and upload files/folders (safe for Ultroid)."""
     reply = await event.get_reply_message()
