@@ -1,3 +1,24 @@
+# Ultroid - Free AI Commands Wrapper (No API Keys Needed)
+# Combines GPT-4o, Claude, DeepSeek, Gemini via free backends.
+
+"""
+✘ Commands Available -
+
+• {i}gpt <prompt>
+    Get response from OpenAI GPT-4o-mini via g4f.
+
+• {i}antr <prompt>
+    Get response from Claude Sonnet 4 via puter.com.
+
+• {i}gemini <prompt>
+    Get response from Gemini 2.5 Flash via PollinationsAI (g4f).
+
+• {i}deepseek <prompt>
+    Get response from DeepSeek R1 via g4f.
+
+✅ No API key needed for any of the above models.
+"""
+
 from . import ultroid_cmd
 import requests
 
