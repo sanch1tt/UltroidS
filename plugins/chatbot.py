@@ -1,17 +1,13 @@
 # Ultroid - UserBot
 # Copyright (C) 2021-2025 TeamUltroid
 #
-# This file is a part of < https://github.com/TeamUltroid/Ultroid/ >
-# PLease read the GNU Affero General Public License in
-# <https://www.github.com/TeamUltroid/Ultroid/blob/main/LICENSE/>.
+# https://github.com/TeamUltroid/Ultroid/
 
 from . import get_help
-
 __doc__ = get_help("help_chatbot")
 
-
-from pyUltroid.fns.tools import get_chatbot_reply
-
+import httpx
+from pyUltroid.fns.tools import get_user
 from . import LOGS, eod, get_string, inline_mention, udB, ultroid_cmd
 
 
@@ -24,6 +20,7 @@ async def im_lonely_chat_with_me(event):
             message = event.text.split(" ", 1)[1]
         except IndexError:
             return await eod(event, get_string("tban_1"), time=10)
+
     reply_ = await get_chatbot_reply(message=message)
     await event.eor(reply_)
 
@@ -66,10 +63,7 @@ async def chat_bot_fn(event, type_):
             LOGS.exception(er)
             user_ = event.chat if event.is_private else None
     if not user_:
-        return await eod(
-            event,
-            get_string("chab_1"),
-        )
+        return await eod(event, get_string("chab_1"))
     key = udB.get_key("CHATBOT_USERS") or {}
     chat = event.chat_id
     user = user_.id
@@ -87,3 +81,29 @@ async def chat_bot_fn(event, type_):
                 del key[chat]
     udB.set_key("CHATBOT_USERS", key)
     await event.eor(f"**ChatBot:**\n{type_}ed {inline_mention(user_)}")
+
+
+# ✅ Gemini API Chat Function
+async def get_chatbot_reply(message: str) -> str:
+    try:
+        api_key = udB.get_key("GOOGLEAPI")
+        if not api_key:
+            return "`GOOGLEAPI key not set. Use .setdb GOOGLEAPI <your-key>`"
+        
+        headers = {"Content-Type": "application/json"}
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+
+        payload = {
+            "contents": [{"parts": [{"text": message}]}]
+        }
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            if resp.status_code != 200:
+                return f"`Error from Gemini API:` {resp.text}"
+            data = resp.json()
+            reply = data["candidates"][0]["content"]["parts"][0]["text"]
+            return reply
+    except Exception as e:
+        LOGS.exception(e)
+        return "`Something went wrong with Gemini API.`"
